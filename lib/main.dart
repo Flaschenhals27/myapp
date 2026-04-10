@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'vorrat_page.dart';
+import 'food_item.dart';
 
 void main() => runApp(const FoodSaverApp());
 
@@ -13,13 +15,62 @@ class FoodSaverApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: Colors.green,
       ),
-      home: const HomeScreen(),
+      home: const AppShell(),
+    );
+  }
+}
+
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _selectedIndex = 0;
+  final _highlightNotifier = ValueNotifier<FoodItem?>(null);
+
+  void _navigateToVorrat(FoodItem item) {
+    _highlightNotifier.value = item;
+    setState(() => _selectedIndex = 1);
+  }
+
+  @override
+  void dispose() {
+    _highlightNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      HomeScreen(onItemTap: _navigateToVorrat),
+      VorratPage(highlightNotifier: _highlightNotifier),
+      const Scaffold(body: Center(child: Text('Rezepte – coming soon'))),
+      const Scaffold(body: Center(child: Text('Statistik – coming soon'))),
+    ];
+
+    return Scaffold(
+      body: pages[_selectedIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.kitchen), label: 'Vorrat'),
+          NavigationDestination(icon: Icon(Icons.restaurant), label: 'Rezepte'),
+          NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
+        ],
+      ),
     );
   }
 }
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.onItemTap});
+
+  final void Function(FoodItem)? onItemTap;
 
   @override
   Widget build(BuildContext context) {
@@ -67,17 +118,9 @@ class HomeScreen extends StatelessWidget {
             const Text("Läuft bald ab", 
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            _buildExpiringItems(),
+            _buildExpiringItems(onItemTap),
           ],
         ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.kitchen), label: 'Vorrat'),
-          NavigationDestination(icon: Icon(Icons.restaurant), label: 'Rezepte'),
-          NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
-        ],
       ),
     );
   }
@@ -145,21 +188,35 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildExpiringItems() {
-    return Column(
-      children: [
-        _foodTile("Milch", "Morgen fällig", Colors.orange),
-        _foodTile("Tomaten", "Heute fällig", Colors.red),
-      ],
-    );
-  }
+  Widget _buildExpiringItems(void Function(FoodItem)? onItemTap) {
+    final items = (FoodStore.items.toList()
+          ..sort((a, b) => a.expiryDate.compareTo(b.expiryDate)))
+        .take(3)
+        .toList();
 
-  Widget _foodTile(String name, String status, Color color) {
-    return ListTile(
-      leading: const CircleAvatar(child: Icon(Icons.fastfood)),
-      title: Text(name),
-      subtitle: Text(status, style: TextStyle(color: color)),
-      trailing: const Icon(Icons.chevron_right),
+    if (items.isEmpty) {
+      return const Text('Keine Lebensmittel im Vorrat.',
+          style: TextStyle(color: Colors.black45));
+    }
+
+    return Column(
+      children: items.map((item) {
+        final (color, label) = switch (item.status) {
+          ExpiryStatus.expired => (Colors.red.shade700, 'Abgelaufen'),
+          ExpiryStatus.today => (Colors.red.shade500, 'Heute fällig'),
+          ExpiryStatus.soon =>
+            (Colors.orange.shade700, 'Noch ${item.daysLeft} Tag(e)'),
+          ExpiryStatus.ok =>
+            (Colors.green.shade700, 'Noch ${item.daysLeft} Tage'),
+        };
+        return ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.fastfood)),
+          title: Text(item.name),
+          subtitle: Text(label, style: TextStyle(color: color)),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => onItemTap?.call(item),
+        );
+      }).toList(),
     );
   }
 }
