@@ -289,6 +289,7 @@ class _VorratPageState extends State<VorratPage> {
           TextButton(
             onPressed: () {
               setState(() => FoodStore.items.remove(item));
+              FoodStore.save();
               Navigator.pop(context);
             },
             child: const Text('Löschen', style: TextStyle(color: Colors.red)),
@@ -365,6 +366,7 @@ class _VorratPageState extends State<VorratPage> {
                     expiryDate: selectedDate,
                   ));
                 });
+                FoodStore.save();
                 Navigator.pop(ctx);
               },
               child: const Text('Hinzufügen'),

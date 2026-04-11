@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'vorrat_page.dart';
 import 'food_item.dart';
 
-void main() => runApp(const FoodSaverApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FoodStore.load();
+  runApp(const FoodSaverApp());
+}
 
 class FoodSaverApp extends StatelessWidget {
   const FoodSaverApp({super.key});

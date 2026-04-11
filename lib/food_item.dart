@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+
 class FoodItem {
   final String name;
   final String category;
@@ -19,32 +22,43 @@ class FoodItem {
     if (daysLeft <= 3) return ExpiryStatus.soon;
     return ExpiryStatus.ok;
   }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'category': category,
+        'expiryDate': expiryDate.toIso8601String(),
+        'barcode': barcode,
+      };
+
+  factory FoodItem.fromJson(Map<String, dynamic> json) => FoodItem(
+        name: json['name'] as String,
+        category: json['category'] as String,
+        expiryDate: DateTime.parse(json['expiryDate'] as String),
+        barcode: json['barcode'] as String?,
+      );
 }
 
 enum ExpiryStatus { expired, today, soon, ok }
 
-/// Einfacher In-Memory-Store, bis echtes State Management kommt.
 class FoodStore {
-  static final List<FoodItem> items = [
-    FoodItem(
-      name: 'Milch',
-      category: 'Milchprodukte',
-      expiryDate: DateTime.now().add(const Duration(days: 1)),
-    ),
-    FoodItem(
-      name: 'Tomaten',
-      category: 'Gemüse',
-      expiryDate: DateTime.now(),
-    ),
-    FoodItem(
-      name: 'Vollkornbrot',
-      category: 'Backwaren',
-      expiryDate: DateTime.now().add(const Duration(days: 5)),
-    ),
-    FoodItem(
-      name: 'Joghurt',
-      category: 'Milchprodukte',
-      expiryDate: DateTime.now().add(const Duration(days: 10)),
-    ),
-  ];
+  static final List<FoodItem> items = [];
+  static const _key = 'food_items';
+
+  static Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_key);
+    if (jsonStr == null) return;
+    final list = jsonDecode(jsonStr) as List<dynamic>;
+    items
+      ..clear()
+      ..addAll(list.map((e) => FoodItem.fromJson(e as Map<String, dynamic>)));
+  }
+
+  static Future<void> save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _key,
+      jsonEncode(items.map((e) => e.toJson()).toList()),
+    );
+  }
 }
