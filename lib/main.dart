@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'vorrat_page.dart';
 import 'food_item.dart';
+import 'rezepte_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,7 +52,7 @@ class _AppShellState extends State<AppShell> {
     final pages = <Widget>[
       HomeScreen(onItemTap: _navigateToVorrat),
       VorratPage(highlightNotifier: _highlightNotifier),
-      const Scaffold(body: Center(child: Text('Rezepte – coming soon'))),
+      const RezeptePage(),
       const Scaffold(body: Center(child: Text('Statistik – coming soon'))),
     ];
 

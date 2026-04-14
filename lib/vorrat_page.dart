@@ -247,7 +247,7 @@ class _VorratPageState extends State<VorratPage> {
             ),
           ],
         ),
-        onLongPress: () => _confirmDelete(context, item),
+        onTap: () => _showItemActions(context, item),
       ),
     ),
     );
@@ -276,25 +276,136 @@ class _VorratPageState extends State<VorratPage> {
     );
   }
 
-  void _confirmDelete(BuildContext context, FoodItem item) {
-    showDialog(
+  void _showItemActions(BuildContext context, FoodItem item) {
+    showModalBottomSheet<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Entfernen?'),
-        content: Text('${item.name} aus dem Vorrat löschen?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Abbrechen')),
-          TextButton(
-            onPressed: () {
-              setState(() => FoodStore.items.remove(item));
-              FoodStore.save();
-              Navigator.pop(context);
-            },
-            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(item.name,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Bearbeiten'),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditDialog(context, item);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+              title: Text('Löschen',
+                  style: TextStyle(color: Colors.red.shade700)),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => FoodStore.items.remove(item));
+                FoodStore.save();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context, FoodItem item) {
+    final nameCtrl = TextEditingController(text: item.name);
+    final catCtrl = TextEditingController(text: item.category);
+    DateTime selectedDate = item.expiryDate;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocalState) => AlertDialog(
+          title: const Text('Eintrag bearbeiten'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name'),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: catCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Kategorie'),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Text('MHD: ',
+                      style: TextStyle(color: Colors.black54)),
+                  TextButton(
+                    child: Text(
+                        '${selectedDate.day.toString().padLeft(2, '0')}.${selectedDate.month.toString().padLeft(2, '0')}.${selectedDate.year}'),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now()
+                            .subtract(const Duration(days: 30)),
+                        lastDate: DateTime.now()
+                            .add(const Duration(days: 730)),
+                      );
+                      if (picked != null) {
+                        setLocalState(() => selectedDate = picked);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Abbrechen')),
+            FilledButton(
+              onPressed: () {
+                if (nameCtrl.text.trim().isEmpty) return;
+                setState(() {
+                  final index = FoodStore.items.indexOf(item);
+                  if (index != -1) {
+                    FoodStore.items[index] = FoodItem(
+                      name: nameCtrl.text.trim(),
+                      category: catCtrl.text.trim().isEmpty
+                          ? 'Sonstiges'
+                          : catCtrl.text.trim(),
+                      expiryDate: selectedDate,
+                      barcode: item.barcode,
+                    );
+                  }
+                });
+                FoodStore.save();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Speichern'),
+            ),
+          ],
+        ),
       ),
     );
   }
