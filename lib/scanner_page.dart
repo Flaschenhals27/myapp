@@ -3,6 +3,21 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+// Wir definieren ein kleines Modell für die Liste
+class ScannedProduct {
+  final String barcode;
+  final String name;
+  final String imageUrl;
+  int quantity;
+
+  ScannedProduct({
+    required this.barcode,
+    required this.name,
+    required this.imageUrl,
+    this.quantity = 1,
+  });
+}
+
 class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key});
 
@@ -13,20 +28,41 @@ class ScannerPage extends StatefulWidget {
 class _ScannerPageState extends State<ScannerPage> {
   final MobileScannerController cameraController = MobileScannerController();
   
-  bool _isProcessing = false; 
-  String? _scannedBarcode;
-  String? _productName;
+  // Die Liste der Produkte, die wir während dieser Session scannen
+  final List<ScannedProduct> _scannedProducts = [];
   
-  // HIER IST DIE NEUERUNG: Eine Liste, die sich alle Scans dieser Session merkt
-  final List<String> _scannedSessionItems = [];
+  // Hilfsvariable, um Mehrfachscans in Millisekunden zu verhindern
+  String? _lastScannedBarcode;
+  DateTime? _lastScanTime;
 
-  Future<void> _fetchProduct(String barcode) async {
-    setState(() {
-      _isProcessing = true;
-      _scannedBarcode = barcode;
-      _productName = null;
-    });
+  Future<void> _handleBarcode(String barcode) async {
+    // Verhindert, dass der gleiche Barcode innerhalb von 2 Sekunden 
+    // mehrfach als "neu" getriggert wird (Prellen)
+    final now = DateTime.now();
+    if (_lastScannedBarcode == barcode && 
+        _lastScanTime != null && 
+        now.difference(_lastScanTime!).inSeconds < 2) {
+      return;
+    }
+    
+    _lastScannedBarcode = barcode;
+    _lastScanTime = now;
 
+    // Prüfen, ob das Produkt schon in unserer Liste ist
+    int existingIndex = _scannedProducts.indexWhere((p) => p.barcode == barcode);
+
+    if (existingIndex != -1) {
+      // Wenn ja: Menge erhöhen
+      setState(() {
+        _scannedProducts[existingIndex].quantity++;
+      });
+    } else {
+      // Wenn nein: API fragen und neu hinzufügen
+      await _fetchAndAddProduct(barcode);
+    }
+  }
+
+  Future<void> _fetchAndAddProduct(String barcode) async {
     final url = Uri.parse('https://world.openfoodfacts.org/api/v2/product/$barcode.json');
     
     try {
@@ -34,15 +70,22 @@ class _ScannerPageState extends State<ScannerPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 1) {
-          setState(() => _productName = data['product']['product_name'] ?? 'Unbekanntes Produkt');
-        } else {
-          setState(() => _productName = 'Produkt nicht gefunden');
+          final productData = data['product'];
+          final name = productData['product_name'] ?? 'Unbekanntes Produkt';
+          final image = productData['image_small_url'] ?? ''; // Kleines Vorschaubild
+
+          setState(() {
+            // Ganz oben in die Liste einfügen
+            _scannedProducts.insert(0, ScannedProduct(
+              barcode: barcode,
+              name: name,
+              imageUrl: image,
+            ));
+          });
         }
       }
     } catch (e) {
-      setState(() => _productName = 'Fehler beim Laden');
-    } finally {
-      setState(() => _isProcessing = false);
+      debugPrint('API Fehler: $e');
     }
   }
 
@@ -51,31 +94,20 @@ class _ScannerPageState extends State<ScannerPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF7),
       appBar: AppBar(
-        // Wir zeigen im Titel an, wie viele Artikel schon gescannt wurden!
-        title: Text('Gescannt: ${_scannedSessionItems.length}'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        // Kamera-Wechsel jetzt oben links
-        leading: IconButton(
-          icon: const Icon(Icons.flip_camera_ios),
-          onPressed: () => cameraController.switchCamera(),
-        ),
-        // Das X zum Schließen oben rechts
+        title: Text('${_scannedProducts.length} Artikel gescannt'),
+        backgroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.close, size: 30),
-            onPressed: () {
-              // Beim X-Klick geben wir die GANZE LISTE an den HomeScreen zurück
-              Navigator.pop(context, _scannedSessionItems);
-            },
+            icon: const Icon(Icons.check, color: Color(0xFF1B5E20), size: 30),
+            onPressed: () => Navigator.pop(context, _scannedProducts),
           ),
         ],
       ),
       body: Column(
         children: [
-          // --- OBERE HÄLFTE: KAMERA ---
-          Expanded(
-            flex: 1,
+          // OBERE HÄLFTE: KAMERA (etwas kleiner für mehr Platz in der Liste)
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.35,
             child: Container(
               margin: const EdgeInsets.all(16),
               clipBehavior: Clip.hardEdge,
@@ -83,107 +115,65 @@ class _ScannerPageState extends State<ScannerPage> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
               ),
-              child: Stack(
-                children: [
-                  MobileScanner(
-                    controller: cameraController,
-                    onDetect: (capture) {
-                      if (_isProcessing || _productName != null) return;
-                      
-                      final List<Barcode> barcodes = capture.barcodes;
-                      for (final barcode in barcodes) {
-                        if (barcode.rawValue != null) {
-                          _fetchProduct(barcode.rawValue!);
-                          break;
-                        }
-                      }
-                    },
-                  ),
-                  Center(
-                    child: Container(
-                      width: 250,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFF66BB6A), width: 3),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  )
-                ],
+              child: MobileScanner(
+                controller: cameraController,
+                onDetect: (capture) {
+                  for (final barcode in capture.barcodes) {
+                    if (barcode.rawValue != null) {
+                      _handleBarcode(barcode.rawValue!);
+                    }
+                  }
+                },
               ),
             ),
           ),
 
-          // --- UNTERE HÄLFTE: ERGEBNIS ---
+          // UNTERE HÄLFTE: DIE LIVE-LISTE
           Expanded(
-            flex: 1,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                 boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))],
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (!_isProcessing && _scannedBarcode == null) ...[
-                    const Icon(Icons.qr_code_scanner_rounded, size: 60, color: Colors.black26),
-                    const SizedBox(height: 16),
-                    const Text("Halte einen Barcode in den Rahmen", style: TextStyle(fontSize: 18, color: Colors.black54)),
-                  ]
-                  else if (_isProcessing) ...[
-                    const CircularProgressIndicator(color: Color(0xFF1B5E20)),
-                    const SizedBox(height: 24),
-                    Text("Suche nach Barcode...", style: const TextStyle(color: Colors.black54)),
-                  ]
-                  else if (_productName != null) ...[
-                    const Icon(Icons.check_circle_outline_rounded, size: 60, color: Color(0xFF66BB6A)),
-                    const SizedBox(height: 16),
-                    Text(
-                      _productName!,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () {
-                            // Einfach nur verwerfen und weiter scannen
-                            setState(() {
-                              _scannedBarcode = null;
-                              _productName = null;
-                            });
-                          },
-                          child: const Text("Verwerfen"),
-                        ),
-                        const SizedBox(width: 16),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1B5E20),
-                            foregroundColor: Colors.white,
+              child: _scannedProducts.isEmpty
+                  ? const Center(child: Text("Scanne ein Produkt...", style: TextStyle(color: Colors.black26)))
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: _scannedProducts.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final product = _scannedProducts[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          leading: Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: product.imageUrl.isNotEmpty
+                                ? Image.network(product.imageUrl, fit: BoxFit.cover)
+                                : const Icon(Icons.fastfood_outlined),
                           ),
-                          onPressed: () {
-                            // 1. Zur Liste hinzufügen
-                            _scannedSessionItems.add(_productName!);
-                            
-                            // 2. Zustand zurücksetzen, damit die Kamera sofort das nächste Produkt scannen kann
-                            setState(() {
-                              _scannedBarcode = null;
-                              _productName = null;
-                            });
-                          },
-                          child: const Text("Merken & Weiter"),
-                        ),
-                      ],
-                    )
-                  ]
-                ],
-              ),
+                          title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: const Text("MHD: Tippe zum Einstellen", style: TextStyle(fontSize: 12, color: Colors.orange)),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1B5E20).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              "x${product.quantity}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ),
         ],
