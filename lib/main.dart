@@ -3,6 +3,10 @@ import 'vorrat_page.dart';
 import 'food_item.dart';
 import 'rezepte_page.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'scanner_page.dart';
+
 
 // --- NEUE FARBPALETTE FÜR DEN LOOK ---
 class AppColors {
@@ -100,9 +104,9 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.bg,
-        surfaceTintColor: Colors.transparent, // Verhindert Farbwechsel beim Scrollen
+        surfaceTintColor: Colors.transparent, 
         elevation: 0,
-        centerTitle: false, // Damit das Logo links steht
+        centerTitle: false, 
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -131,16 +135,14 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-            // --- DER KRINGEL ---
             Container(
-              margin: const EdgeInsets.only(top: 2), // Abstand zum Text
+              margin: const EdgeInsets.only(top: 2), 
               height: 4,
-              width: 100, // Länge des Kringels (anpassen an Textlänge)
+              width: 100, 
               decoration: BoxDecoration(
-                color: const Color(0xFF66BB6A).withOpacity(0.4), // Sanftes Hellgrün
+                color: const Color(0xFF66BB6A).withOpacity(0.4), 
                 borderRadius: BorderRadius.circular(10),
               ),
-              // Für einen echten "handgezeichneten" Look nutzen wir einen CustomPainter oder einen kleinen Pfad
               child: CustomPaint(
                 painter: SquigglePainter(),
               ),
@@ -168,12 +170,30 @@ class HomeScreen extends StatelessWidget {
             _buildImpactCard(),
             const SizedBox(height: 24),
             
-            // --- SCANNER BUTTON ALS CARD ---
+            // --- DER NEUE, KLICKBARE SCANNER BUTTON ---
             _buildActionCard(
               title: "Lebensmittel scannen",
               subtitle: "MHD & Name automatisch erkennen",
               icon: Icons.qr_code_scanner_rounded,
-              onTap: () {}, // Kamera-Logik
+              onTap: () async {
+                print("Scanner wird geöffnet...");
+                
+                final String? barcode = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ScannerPage()),
+                );
+
+                if (barcode != null) {
+                  print("Erfolgreich gescannt: $barcode");
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Barcode $barcode erkannt! Suche Produkt...')),
+                  );
+
+                  // API aufrufen und den context mitgeben
+                  await _fetchProductData(context, barcode);
+                }
+              },
             ),
             
             const SizedBox(height: 32),
@@ -191,6 +211,46 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+
+  // --- HIER IST JETZT DIE API METHODE ---
+  // Wir übergeben BuildContext, da wir in einem StatelessWidget sind
+  Future<void> _fetchProductData(BuildContext context, String barcode) async {
+    final url = Uri.parse('https://world.openfoodfacts.org/api/v2/product/$barcode.json');
+    
+    try {
+      final response = await http.get(url);
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['status'] == 1) {
+          final product = data['product'];
+          final productName = product['product_name'] ?? 'Unbekanntes Produkt';
+          
+          print('Gefunden: $productName');
+          
+          // context.mounted prüft, ob die Seite nach der Ladezeit noch existiert
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gefunden: $productName'),
+              backgroundColor: const Color(0xFF66BB6A), 
+            ),
+          );
+        } else {
+          print('Produkt nicht in der Datenbank gefunden.');
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Produkt leider nicht erkannt.')),
+          );
+        }
+      }
+    } catch (e) {
+      print('Fehler beim Abrufen der API: $e');
+    }
+  }
+
+  // --- WEITERE UI-METHODEN ---
 
   Widget _buildSectionTitle(String title, IconData icon) {
     return Row(
@@ -249,32 +309,41 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  // --- DER NEUE ELEVATED BUTTON FÜR DEN WEB-BROWSER ---
   Widget _buildActionCard({required String title, required String subtitle, required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(color: AppColors.cardShadow, blurRadius: 8, offset: Offset(0, 2))],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1B5E20),
+          elevation: 2,
+          padding: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppColors.accentGreen.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: AppColors.primaryGreen, size: 28),
+              decoration: BoxDecoration(
+                color: const Color(0xFF66BB6A).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: const Color(0xFF1B5E20), size: 28),
             ),
             const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(subtitle, style: const TextStyle(color: Colors.black54, fontSize: 12)),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+                  Text(subtitle, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                ],
+              ),
             ),
-            const Spacer(),
             const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.black26),
           ],
         ),
