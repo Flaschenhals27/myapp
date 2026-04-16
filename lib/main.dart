@@ -171,27 +171,32 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 24),
             
             // --- DER NEUE, KLICKBARE SCANNER BUTTON ---
+            
             _buildActionCard(
               title: "Lebensmittel scannen",
               subtitle: "MHD & Name automatisch erkennen",
               icon: Icons.qr_code_scanner_rounded,
               onTap: () async {
-                print("Scanner wird geöffnet...");
-                
-                final String? barcode = await Navigator.push(
+                // 1. Wir warten jetzt auf eine LISTE von Strings!
+                final List<String>? scannedItems = await Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ScannerPage()),
                 );
 
-                if (barcode != null) {
-                  print("Erfolgreich gescannt: $barcode");
+                // 2. Wenn die Liste nicht leer ist (der User hat also was gemerkt und dann X gedrückt)
+                if (scannedItems != null && scannedItems.isNotEmpty) {
+                  print("Erfolgreich gescannt: $scannedItems");
                   
+                  // Feedback mit der exakten Anzahl
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Barcode $barcode erkannt! Suche Produkt...')),
+                    SnackBar(
+                      content: Text('${scannedItems.length} Produkte zum Vorrat hinzugefügt!'),
+                      backgroundColor: const Color(0xFF66BB6A),
+                    ),
                   );
-
-                  // API aufrufen und den context mitgeben
-                  await _fetchProductData(context, barcode);
+                  
+                  // HIER SPÄTER: 
+                  // Eine for-Schleife, die all diese Produkte in deine echte FoodStore-Datenbank speichert.
                 }
               },
             ),
