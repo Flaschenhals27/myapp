@@ -177,26 +177,44 @@ class HomeScreen extends StatelessWidget {
               subtitle: "MHD & Name automatisch erkennen",
               icon: Icons.qr_code_scanner_rounded,
               onTap: () async {
-                // 1. Wir warten jetzt auf eine LISTE von Strings!
-                final List<String>? scannedItems = await Navigator.push(
+                // 1. Scanner aufrufen und auf die Liste warten
+                final result = await Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ScannerPage()),
                 );
 
-                // 2. Wenn die Liste nicht leer ist (der User hat also was gemerkt und dann X gedrückt)
-                if (scannedItems != null && scannedItems.isNotEmpty) {
-                  print("Erfolgreich gescannt: $scannedItems");
-                  
-                  // Feedback mit der exakten Anzahl
+                // 2. Prüfen, ob wir die Liste bekommen haben (Haken wurde geklickt)
+                // Wir prüfen explizit auf List<ScannedProduct>
+                if (result != null && result is List<ScannedProduct>) {
+                  if (result.isEmpty) return; // Nichts gescannt, nichts zu tun
+
+                  // 3. Jedes gescannte Produkt in die Vorrats-Datenbank übersetzen
+                  for (final scannedItem in result) {
+                    
+                    // Da wir Mengen zählen (z.B. x3), fügen wir es entsprechend oft hinzu
+                    for (int i = 0; i < scannedItem.quantity; i++) {
+                      FoodStore.items.add(
+                        FoodItem(
+                          name: scannedItem.name,
+                          category: 'Neu gescannt', // Eine Standard-Kategorie
+                          // Das echte MHD kommt später, wir setzen erst mal +7 Tage als Standard
+                          expiryDate: DateTime.now().add(const Duration(days: 7)), 
+                        )
+                      );
+                    }
+                  }
+
+                  // 4. Den neuen Vorrat dauerhaft speichern
+                  FoodStore.save();
+
+                  // 5. Erfolgsmeldung anzeigen
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('${scannedItems.length} Produkte zum Vorrat hinzugefügt!'),
+                      content: Text('${result.length} Produkt(e) erfolgreich gespeichert!'),
                       backgroundColor: const Color(0xFF66BB6A),
                     ),
                   );
-                  
-                  // HIER SPÄTER: 
-                  // Eine for-Schleife, die all diese Produkte in deine echte FoodStore-Datenbank speichert.
                 }
               },
             ),
