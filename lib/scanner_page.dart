@@ -72,21 +72,75 @@ class _ScannerPageState extends State<ScannerPage> {
         if (data['status'] == 1) {
           final productData = data['product'];
           final name = productData['product_name'] ?? 'Unbekanntes Produkt';
-          final image = productData['image_small_url'] ?? ''; // Kleines Vorschaubild
+          final image = productData['image_small_url'] ?? '';
 
           setState(() {
-            // Ganz oben in die Liste einfügen
             _scannedProducts.insert(0, ScannedProduct(
               barcode: barcode,
               name: name,
               imageUrl: image,
             ));
           });
+        } else {
+          if (mounted) _showNotFoundDialog(barcode);
         }
       }
     } catch (e) {
       debugPrint('API Fehler: $e');
     }
+  }
+
+  void _showNotFoundDialog(String barcode) {
+    final nameCtrl = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nicht in der Datenbank'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Dieses Produkt konnte nicht gefunden werden. Du kannst es trotzdem manuell hinzufügen.',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Name eingeben',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.sentences,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameCtrl.text.trim().isEmpty
+                  ? 'Unbekanntes Produkt'
+                  : nameCtrl.text.trim();
+              setState(() {
+                _scannedProducts.insert(0, ScannedProduct(
+                  barcode: barcode,
+                  name: name,
+                  imageUrl: '',
+                ));
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Hinzufügen'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
