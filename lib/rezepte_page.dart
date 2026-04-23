@@ -25,7 +25,9 @@ class _RezeptePageState extends State<RezeptePage> {
   }
 
   Future<void> _generateRecipes() async {
-    final expiring = _expiringItems;
+    final expiring = _expiringItems
+        .where((i) => i.status != ExpiryStatus.expired)
+        .toList();
     if (expiring.isEmpty) return;
 
     setState(() {
