@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'food_item.dart';
+import 'scanner_page.dart';
 
 class VorratPage extends StatefulWidget {
   const VorratPage({super.key, this.highlightNotifier});
@@ -15,6 +16,7 @@ class _VorratPageState extends State<VorratPage> {
   String? _selectedCategory;
   FoodItem? _highlightedItem;
   final _scrollController = ScrollController();
+  bool _fabOpen = false;
 
   @override
   void initState() {
@@ -118,13 +120,7 @@ class _VorratPageState extends State<VorratPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddDialog(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Manuell hinzufügen'),
-        backgroundColor: Colors.green.shade700,
-        foregroundColor: Colors.white,
-      ),
+      floatingActionButton: _buildSpeedDial(),
     );
   }
 
@@ -410,6 +406,35 @@ class _VorratPageState extends State<VorratPage> {
     );
   }
 
+  Future<void> _openScanner() async {
+    setState(() => _fabOpen = false);
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ScannerPage()),
+    );
+    if (result != null && result is List<ScannedProduct>) {
+      if (result.isEmpty) return;
+      for (final scannedItem in result) {
+        for (int i = 0; i < scannedItem.quantity; i++) {
+          FoodStore.items.add(FoodItem(
+            name: scannedItem.name,
+            category: 'Neu gescannt',
+            expiryDate: DateTime.now().add(const Duration(days: 7)),
+          ));
+        }
+      }
+      FoodStore.save();
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${result.length} Produkt(e) gespeichert!'),
+          backgroundColor: const Color(0xFF66BB6A),
+        ),
+      );
+    }
+  }
+
   void _showAddDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
     final catCtrl = TextEditingController();
@@ -485,6 +510,72 @@ class _VorratPageState extends State<VorratPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSpeedDial() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (_fabOpen) ...[
+          _buildMiniFab(
+            label: 'Scannen',
+            icon: Icons.qr_code_scanner_rounded,
+            heroTag: 'fab_scan',
+            onTap: _openScanner,
+          ),
+          const SizedBox(height: 12),
+          _buildMiniFab(
+            label: 'Manuell',
+            icon: Icons.edit_outlined,
+            heroTag: 'fab_manual',
+            onTap: () => _showAddDialog(context),
+          ),
+          const SizedBox(height: 12),
+        ],
+        FloatingActionButton(
+          heroTag: 'fab_main',
+          onPressed: () => setState(() => _fabOpen = !_fabOpen),
+          backgroundColor: Colors.green.shade700,
+          foregroundColor: Colors.white,
+          child: AnimatedRotation(
+            turns: _fabOpen ? 0.125 : 0,
+            duration: const Duration(milliseconds: 200),
+            child: const Icon(Icons.add),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniFab({
+    required String label,
+    required IconData icon,
+    required String heroTag,
+    required VoidCallback onTap,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FloatingActionButton.small(
+          heroTag: heroTag,
+          onPressed: onTap,
+          backgroundColor: Colors.green.shade700,
+          foregroundColor: Colors.white,
+          child: Icon(icon),
+        ),
+      ],
     );
   }
 
