@@ -381,7 +381,7 @@ class HomeScreen extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         itemCount: 3,
         clipBehavior: Clip.none,
-        separatorBuilder: (_, __) => const SizedBox(width: 16),
+        separatorBuilder: (_, _) => const SizedBox(width: 16),
         itemBuilder: (context, index) {
           final icons = ["🥘", "🍝", "🥗"];
           return Container(
