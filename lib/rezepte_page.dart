@@ -39,64 +39,10 @@ class _RezeptePageState extends State<RezeptePage> {
       final recipes = await RecipeService.fetchRecipes(expiring);
       setState(() => _recipes = recipes);
     } on Exception catch (e) {
-      final msg = e.toString();
-      if (msg.contains('kein_api_key') || msg.contains('ungültiger_api_key')) {
-        if (mounted) await _showApiKeyDialog();
-      } else {
-        setState(() => _error = 'Fehler beim Laden der Rezepte.\n$msg');
-      }
+      setState(() => _error = 'Fehler beim Laden der Rezepte.\n${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _showApiKeyDialog() async {
-    final ctrl = TextEditingController();
-    final existing = await RecipeService.getApiKey();
-    if (existing != null) ctrl.text = existing;
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Groq API-Key'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Gib deinen Groq API-Key ein, um KI-Rezeptvorschläge zu nutzen.',
-              style: TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(
-                labelText: 'gsk_...',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (ctrl.text.trim().isNotEmpty) {
-                await RecipeService.saveApiKey(ctrl.text.trim());
-              }
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Speichern'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -107,13 +53,6 @@ class _RezeptePageState extends State<RezeptePage> {
       appBar: AppBar(
         title: const Text('Rezeptvorschläge',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.key_outlined),
-            tooltip: 'API-Key ändern',
-            onPressed: () => _showApiKeyDialog(),
-          ),
-        ],
       ),
       body: expiring.isEmpty
           ? _buildEmptyState()

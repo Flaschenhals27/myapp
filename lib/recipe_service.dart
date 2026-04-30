@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'food_item.dart';
 
 class Recipe {
@@ -28,68 +27,34 @@ class Recipe {
 }
 
 class RecipeService {
-  static const _apiKeyPref = 'groq_api_key';
-
-  static Future<String?> getApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_apiKeyPref);
-  }
-
-  static Future<void> saveApiKey(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_apiKeyPref, key);
-  }
+  // Supabase-Projekt-URL und Anon-Key (öffentlich, kein Geheimnis)
+  // Nach dem Deployen hier eintragen:
+  static const _supabaseUrl = 'https://YOUR_PROJECT_REF.supabase.co';
+  static const _supabaseAnonKey = 'YOUR_ANON_KEY';
 
   static Future<List<Recipe>> fetchRecipes(List<FoodItem> expiringItems) async {
-    final apiKey = await getApiKey();
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      throw Exception('kein_api_key');
-    }
-
     final itemNames = expiringItems.map((i) => i.name).join(', ');
 
     final response = await http.post(
-      Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+      Uri.parse('$_supabaseUrl/functions/v1/recipe-proxy'),
       headers: {
-        'Authorization': 'Bearer ${apiKey.trim()}',
+        'Authorization': 'Bearer $_supabaseAnonKey',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({
-        'model': 'llama-3.3-70b-versatile',
-        'max_tokens': 2048,
-        'messages': [
-          {
-            'role': 'system',
-            'content': 'Du bist ein Kochassistent. Antworte ausschließlich mit gültigem JSON, ohne zusätzlichen Text.',
-          },
-          {
-            'role': 'user',
-            'content': '''Schlage 3 einfache Rezepte vor, die folgende Lebensmittel verwenden, die bald ablaufen: $itemNames.
-
-Antworte NUR mit einem gültigen JSON-Array:
-[
-  {
-    "name": "Rezeptname",
-    "description": "Kurze appetitliche Beschreibung (1-2 Sätze)",
-    "ingredients": ["Zutat 1 mit Menge", "Zutat 2 mit Menge"],
-    "steps": ["Schritt 1", "Schritt 2", "Schritt 3"],
-    "durationMinutes": 30
-  }
-]''',
-          }
-        ],
-      }),
+      body: jsonEncode({'ingredients': itemNames}),
     ).timeout(const Duration(seconds: 30));
 
-    if (response.statusCode == 401) throw Exception('ungültiger_api_key');
+    if (response.statusCode == 401) {
+      throw Exception('Supabase-Authentifizierung fehlgeschlagen.');
+    }
     if (response.statusCode != 200) {
-      throw Exception('API-Fehler ${response.statusCode}');
+      throw Exception('Server-Fehler ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final text = (data['choices'] as List<dynamic>)[0]['message']['content'] as String;
+    final text =
+        (data['choices'] as List<dynamic>)[0]['message']['content'] as String;
 
-    // JSON aus der Antwort extrahieren
     final jsonMatch = RegExp(r'\[[\s\S]*\]').firstMatch(text);
     if (jsonMatch == null) throw Exception('Ungültiges Antwortformat');
 
